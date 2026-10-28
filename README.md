@@ -23,7 +23,7 @@
 
 HighwayDT is a data-driven digital twin of a highway segment on Interstate 695 in Baltimore, Maryland, where road tests of new vehicle control policies would be unsafe. The twin is built from vehicle trajectories that a drone recorded on this segment. It reproduces car-following behavior with the recorded trajectories and a calibrated Intelligent Driver Model (IDM), a widely used model of how a driver adjusts speed to the vehicle ahead. HighwayDT runs a SUMO–CARLA co-simulation, which couples the SUMO traffic simulator with the CARLA driving simulator under additional physical constraints such as weather and road friction. It generates many scenarios in parallel and supports closed-loop simulation and predictive analytics for testing control policies. A fidelity test of following distances against real-world measurements shows only a small deviation.
 
-**Status.** Research prototype. This repository contains part of HighwayDT: a sample of the drone trajectories, the IDM calibration notebook and its guideline, the CARLA scripts for weather, road friction and LiDAR recording, and the Sphinx documentation for setting up CARLA, SUMO and their co-simulation. The SUMO network of the Interstate 695 segment and the scenario files used in the paper are not included. **The federated reinforcement learning training, attack and defense code of the paper is not part of this repository.** A static review found several defects in the scripts and the notebook, listed in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
+**Status.** Research prototype. This repository contains part of HighwayDT: a sample of the drone trajectories, the IDM calibration notebook and its guideline, the CARLA scripts for weather, road friction and LiDAR recording, and the Sphinx documentation for setting up CARLA, SUMO and their co-simulation. The SUMO network of the Interstate 695 segment and the scenario files used in the paper are not included. **The federated reinforcement learning training, attack and defense code of the paper is not part of this repository.** The CARLA scripts have not been run against a CARLA server since their last revision. [KNOWN-ISSUES.md](KNOWN-ISSUES.md) lists what still needs a check in CARLA.
 
 ## What it looks like
 
@@ -37,7 +37,7 @@ HighwayDT is a data-driven digital twin of a highway segment on Interstate 695 i
 <td><em>A HighwayDT scene used in the paper: a leading vehicle (red), three ego vehicles (yellow) and a following vehicle (blue) in one lane. Image from Zhang et al., arXiv:2607.08137.</em></td>
 </tr>
 <tr>
-<td><img src="docs/img/idm_calibration_gap.png" alt="Gap of one recorded vehicle over 12 seconds against the gap simulated by the calibrated IDM"></td>
+<td><img src="docs/img/idm_calibration_gap.png" alt="Gap of one recorded vehicle over 12.4 seconds against the gap simulated by the calibrated IDM"></td>
 <td><img src="docs/img/town04_cosim.gif" alt="SUMO–CARLA co-simulation on CARLA's Town04 map, with the CARLA view on the left and SUMO-GUI on the right"></td>
 </tr>
 <tr>
@@ -51,7 +51,7 @@ HighwayDT is a data-driven digital twin of a highway segment on Interstate 695 i
 The calibration notebook needs only Python packages. `sko` is installed as `scikit-opt`.
 
 ```bash
-git clone https://github.com/ZzZTripleZzZ/HighwayDT.git && cd highwayDT
+git clone https://github.com/ZzZTripleZzZ/HighwayDT.git && cd HighwayDT
 python3 -m venv .venv && source .venv/bin/activate
 pip install pandas numpy matplotlib scikit-opt jupyter
 ```
@@ -73,13 +73,13 @@ cd Data && jupyter notebook Sample.ipynb
 Start a CARLA server, then run a script from `Code/` against it on `localhost:2000`.
 
 ```bash
-./CarlaUE4.sh                                   # in the CARLA folder
-python Code/LidarData_compar.py --frames 500    # LiDAR top view, written to _out/lidar_output.mp4
-python Code/Weather_friction_change.py          # cycles weather presets every 3 s
-python Code/Town_07_truck_weather_change.py     # Town07 truck with a chase camera, written to Video/output.mp4
+./CarlaUE4.sh                                                # in the CARLA folder
+python Code/lidar_top_view.py --frames 500                   # LiDAR top view, written to _out/lidar_output.mp4
+python Code/Weather_friction_change.py --cycles 20           # 20 weather and friction changes, one every 3 s
+python Code/Town_07_truck_weather_change.py --duration 60    # Town07 truck with a chase camera, written to Video/output.mp4
 ```
 
-The road friction part of the two weather scripts has no effect at the moment, see [KNOWN-ISSUES.md](KNOWN-ISSUES.md). To run CARLA's SUMO bridge on its Town04 example, as in the GIF above:
+Each script takes `--help`. The two weather scripts set the road friction with CARLA's friction trigger volume (`static.trigger.friction`). `Weather_friction_change.py` places one volume over the whole map, and `Town_07_truck_weather_change.py` centers one on the truck at every weather change. `--map` selects another map for the truck script. To run CARLA's SUMO bridge on its Town04 example, as in the GIF above:
 
 ```bash
 cd $CARLA_ROOT/Co-Simulation/Sumo
@@ -96,7 +96,7 @@ $$\frac{dv_n}{dt} = a\left[1-\left(\frac{v_n}{v_0}\right)^{\delta}-\left(\frac{s
 
 where $a$ is the maximum acceleration, $b$ the comfortable deceleration, $v_0$ the desired speed, $s_0$ the minimum gap, $T$ the time gap and $\delta = 4$.
 
-**Calibration.** A genetic algorithm fits $(s_0, T, a, b, v_0)$ by minimizing the root mean square error of the spacing between recorded and simulated trajectories. It runs 200 generations of 100 individuals with a mutation rate of 0.05 and a 0.2 s simulation step. The notebook bounds the parameters to $s_0 \in [1, 5]$ m, $T \in [0.1, 3]$ s, $a \in [0.1, 4]$ m/s², $b \in [0.1, 9]$ m/s² and $v_0 \in [8, 33]$ m/s. The guideline PDF in `Data/` explains the calibration procedure.
+**Calibration.** The notebook resamples every vehicle's trajectory to a fixed 0.2 s step and finds each vehicle's leader as the nearest vehicle ahead in the same lane. A genetic algorithm then fits $(s_0, T, a, b, v_0)$ for one vehicle by minimizing the root mean square error (RMSE) of the gap between the recorded and the simulated trajectory. It runs 200 generations of 100 individuals with a mutation rate of 0.05, and the IDM is integrated with the same 0.2 s step. The bounds are $s_0 \in [1, 5]$ m, $T \in [0.1, 3]$ s, $a \in [0.1, 4]$ m/s², $b \in [0.1, 9]$ m/s² and $v_0 \in [16, 33.6]$ m/s. The lower bound of $v_0$ is above the highest speed in the sample (15.7 m/s), as the guideline PDF in `Data/` requires. For vehicle 104 the calibrated parameters are $s_0 = 3.68$ m, $T = 0.29$ s, $a = 1.15$ m/s², $b = 1.65$ m/s² and $v_0 = 23.6$ m/s, and the gap RMSE over 12.4 s is 0.17 m.
 
 **Simulation.** SUMO moves the traffic and CARLA renders the vehicles, sensors and environment. On top of the calibrated car-following behavior, HighwayDT changes the weather and the road friction during a run to model slippery roads.
 
@@ -113,11 +113,12 @@ In the paper's setup, 10 vehicles train for 2,000 rounds in their local twin env
 ## Repository layout
 
 ```
-highwayDT/
+HighwayDT/
 ├── Code/
-│   ├── LidarData_compar.py              # records a top view of a LiDAR point cloud in CARLA
+│   ├── lidar_top_view.py                # records a top view of a LiDAR point cloud in CARLA
 │   ├── Weather_friction_change.py       # cycles CARLA weather presets and friction values
-│   └── Town_07_truck_weather_change.py  # truck with a chase camera in Town07 under changing weather
+│   ├── Town_07_truck_weather_change.py  # truck with a chase camera in Town07 under changing weather
+│   └── friction_trigger.py              # spawns and replaces CARLA friction trigger volumes
 ├── Data/
 │   ├── Snowy_I-695_Sample01.csv         # drone trajectory sample from Interstate 695
 │   ├── Sample.ipynb                     # IDM calibration with a genetic algorithm

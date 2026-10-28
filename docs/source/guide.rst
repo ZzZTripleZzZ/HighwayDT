@@ -17,25 +17,27 @@ Running a Basic Simulation
 
    Leave this terminal open as the CARLA server will continue to run in the background.
 
-2. **Prepare SUMO Scenario**:
+2. **Load the Map**:
 
-   Navigate to the directory containing the SUMO scenario files:
+   Load the CARLA map that matches the SUMO scenario. For the Town04 example that comes with CARLA:
 
    .. code-block:: bash
 
-      cd ~/sumo-carla-co-simulation/scenarios
+      cd ~/carla/PythonAPI/util
+      python3 config.py --map Town04
 
-   Edit the SUMO configuration file (`.sumocfg`) to customize traffic settings if needed.
+   The SUMO configurations (``.sumocfg``) of the examples are in ``~/carla/Co-Simulation/Sumo/examples``. Edit a configuration to customize traffic settings if needed.
 
 3. **Run Co-Simulation**:
 
-   Execute the co-simulation script:
+   Run CARLA's synchronization script with the SUMO configuration:
 
    .. code-block:: bash
 
-      python3 run_co_simulation.py --scenario scenarios/sumo_scenario.sumocfg
+      cd ~/carla/Co-Simulation/Sumo
+      python3 run_synchronization.py examples/Town04.sumocfg --sumo-gui
 
-   Monitor the output in the terminal for any errors or warnings.
+   Monitor the output in the terminal for any errors or warnings. Press ``Ctrl+C`` to stop.
 
 Customizing Simulation Scenarios
 --------------------------------

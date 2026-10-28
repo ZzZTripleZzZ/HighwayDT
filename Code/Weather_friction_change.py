@@ -1,65 +1,81 @@
-import carla
+"""Cycle CARLA weather presets and set a matching road friction.
+
+The script connects to a running CARLA server and does not change the map or the
+world settings, so it can run next to another client such as the SUMO co-simulation.
+Every ``--interval`` seconds of wall-clock time it picks a random weather preset and
+replaces the friction box with one that has the friction value of that preset.
+
+Friction area: there is no ego vehicle in this script, so one box centered on the map
+origin covers the whole map. Its default half size of 10 km is the size that CARLA's
+scenario_runner uses for the same purpose.
+
+On exit the script destroys the friction box and restores the weather it found.
+"""
+
+import argparse
 import random
 import time
 
+import carla
 
-def change_weather_and_friction(world):
-    weather_presets = [
-        carla.WeatherParameters.ClearNoon,
-        carla.WeatherParameters.CloudyNoon,
-        carla.WeatherParameters.WetNoon,
-        carla.WeatherParameters.MidRainyNoon,
-        carla.WeatherParameters.HardRainNoon,
-        carla.WeatherParameters.SoftRainNoon,
-        carla.WeatherParameters.ClearSunset,
-        carla.WeatherParameters.CloudySunset,
-        carla.WeatherParameters.WetSunset,
-        carla.WeatherParameters.MidRainSunset,
-        carla.WeatherParameters.HardRainSunset,
-        carla.WeatherParameters.SoftRainSunset
-    ]
+from friction_trigger import destroy_actors, replace_friction_trigger
 
-    friction_values = {
-        carla.WeatherParameters.ClearNoon: 1.0,
-        carla.WeatherParameters.CloudyNoon: 0.9,
-        carla.WeatherParameters.WetNoon: 0.8,
-        carla.WeatherParameters.MidRainyNoon: 0.7,
-        carla.WeatherParameters.HardRainNoon: 0.6,
-        carla.WeatherParameters.SoftRainNoon: 0.7,
-        carla.WeatherParameters.ClearSunset: 1.0,
-        carla.WeatherParameters.CloudySunset: 0.9,
-        carla.WeatherParameters.WetSunset: 0.8,
-        carla.WeatherParameters.MidRainSunset: 0.7,
-        carla.WeatherParameters.HardRainSunset: 0.6,
-        carla.WeatherParameters.SoftRainSunset: 0.7
-    }
-
-    while True:
-        weather = random.choice(weather_presets)
-        world.set_weather(weather)
-
-        friction = friction_values[weather]
-        set_road_friction(world, friction)
-
-        time.sleep(3)  # 每10秒变换一次天气和摩擦力
+# Friction value of each weather preset, keyed by the preset name in carla.WeatherParameters
+FRICTION_BY_PRESET = {
+    'ClearNoon': 1.0,
+    'CloudyNoon': 0.9,
+    'WetNoon': 0.8,
+    'MidRainyNoon': 0.7,
+    'HardRainNoon': 0.6,
+    'SoftRainNoon': 0.7,
+    'ClearSunset': 1.0,
+    'CloudySunset': 0.9,
+    'WetSunset': 0.8,
+    'MidRainSunset': 0.7,
+    'HardRainSunset': 0.6,
+    'SoftRainSunset': 0.7,
+}
 
 
-def set_road_friction(world, friction_value):
-    for actor in world.get_actors():
-        if 'static.trigger' in actor.type_id:
-            friction_bp = world.get_blueprint_library().find('static.trigger')
-            friction_bp.set_attribute('friction', str(friction_value))
-            transform = actor.get_transform()
-            world.spawn_actor(friction_bp, transform)
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--host', default='127.0.0.1', help='CARLA server host (default: 127.0.0.1)')
+    parser.add_argument('-p', '--port', type=int, default=2000, help='CARLA server port (default: 2000)')
+    parser.add_argument('--cycles', type=int, default=20,
+                        help='number of weather changes before the script exits (default: 20)')
+    parser.add_argument('--interval', type=float, default=3.0,
+                        help='seconds between two weather changes (default: 3.0)')
+    parser.add_argument('--friction-half-size', type=float, default=10000.0,
+                        help='half size of the friction box in meters (default: 10000)')
+    parser.add_argument('--seed', type=int, default=None, help='random seed for the preset choice')
+    return parser.parse_args()
 
 
 def main():
-    client = carla.Client('localhost', 2000)
+    args = parse_args()
+    random.seed(args.seed)
+
+    client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
     world = client.get_world()
+    original_weather = world.get_weather()
 
-    # 开始变换天气和摩擦力
-    change_weather_and_friction(world)
+    trigger = None
+    try:
+        for cycle in range(args.cycles):
+            name = random.choice(list(FRICTION_BY_PRESET))
+            friction = FRICTION_BY_PRESET[name]
+            world.set_weather(getattr(carla.WeatherParameters, name))
+            trigger = replace_friction_trigger(world, trigger, friction, carla.Location(0.0, 0.0, 0.0),
+                                               args.friction_half_size)
+            print(f'[{cycle + 1}/{args.cycles}] weather {name}, friction {friction}')
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print('Interrupted by user.')
+    finally:
+        destroy_actors([trigger])
+        world.set_weather(original_weather)
+        print('Friction box destroyed and original weather restored.')
 
 
 if __name__ == '__main__':

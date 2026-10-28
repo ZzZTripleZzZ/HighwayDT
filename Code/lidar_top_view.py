@@ -1,31 +1,42 @@
-import os
-import carla
-import argparse
-from queue import Queue, Empty
-import numpy as np
-from matplotlib import cm
-import cv2
+"""Record a top view of the LiDAR point cloud of a car on autopilot in CARLA.
 
-VIRIDIS = np.array(cm.get_cmap('viridis').colors)
+The script spawns a Lincoln MKZ 2017 with a ray-cast LiDAR at the first spawn point
+of the current map, runs the world in synchronous mode with a 0.05 s step, and draws
+each LiDAR sweep from above, colored by intensity. The frames are written to ``--out``.
+On exit it destroys the car and the sensor and restores the world settings and the
+Traffic Manager mode.
+"""
+
+import argparse
+import os
+from queue import Queue, Empty
+
+import carla
+import cv2
+import matplotlib
+import numpy as np
+
+VIRIDIS = np.array(matplotlib.colormaps['viridis'].colors)
 VID_RANGE = np.linspace(0.0, 1.0, VIRIDIS.shape[0])
+FIXED_DELTA_SECONDS = 0.05
+PIXELS_PER_METER = 5
 
 def sensor_callback(data, queue):
     queue.put(data)
 
-def tutorial(args):
+def record(args):
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
     world = client.get_world()
     bp_lib = world.get_blueprint_library()
 
-    traffic_manager = client.get_trafficmanager(8000)
-    traffic_manager.set_synchronous_mode(True)
-
+    traffic_manager = client.get_trafficmanager(args.tm_port)
     original_settings = world.get_settings()
     settings = world.get_settings()
     settings.synchronous_mode = True
-    settings.fixed_delta_seconds = 0.05
+    settings.fixed_delta_seconds = FIXED_DELTA_SECONDS
     world.apply_settings(settings)
+    traffic_manager.set_synchronous_mode(True)
 
     vehicle = None
     lidar = None
@@ -33,8 +44,7 @@ def tutorial(args):
     previous_frame_data = None
 
     try:
-        if not os.path.isdir('_out'):
-            os.mkdir('_out')
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 
         vehicle_bp = bp_lib.filter("vehicle.lincoln.mkz_2017")[0]
         lidar_bp = bp_lib.filter("sensor.lidar.ray_cast")[0]
@@ -55,9 +65,8 @@ def tutorial(args):
         vehicle = world.spawn_actor(
             blueprint=vehicle_bp,
             transform=selected_spawn_point)
-        vehicle.set_autopilot(True)
-
-        traffic_manager.vehicle_percentage_speed_difference(vehicle, 50)  # Reduce speed by 50%
+        vehicle.set_autopilot(True, args.tm_port)
+        traffic_manager.vehicle_percentage_speed_difference(vehicle, 50)  # drive 50% below the speed limit
 
         lidar_transform = carla.Transform(
             carla.Location(x=0.0, z=2.5),
@@ -68,8 +77,9 @@ def tutorial(args):
             transform=lidar_transform,
             attach_to=vehicle)
 
-        save_path = '_out/lidar_output.mp4'
-        video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (args.width, args.height))
+        # One video frame per simulation step, so the video plays in simulation time
+        fps = round(1.0 / FIXED_DELTA_SECONDS)
+        video_writer = cv2.VideoWriter(args.out, cv2.VideoWriter_fourcc(*'mp4v'), fps, (args.width, args.height))
 
         lidar_visualization = np.zeros((args.height, args.width, 3), dtype=np.uint8)
         lidar_queue = Queue()
@@ -94,22 +104,29 @@ def tutorial(args):
 
             lidar_visualization[:] = 0
 
+            # Normalize intensity to [0, 1] within the sweep. A sweep with zero or
+            # negative maximum intensity is drawn with the lowest color.
             intensity = np.array(p_cloud[:, 3])
             max_intensity = np.max(intensity)
-            intensity /= max_intensity  # Normalize intensity across the entire point cloud
+            if max_intensity > 0:
+                intensity = np.clip(intensity / max_intensity, 0.0, 1.0)
+            else:
+                intensity = np.zeros_like(intensity)
 
-            u_coord = (p_cloud[:, 0] * 5 + args.width // 2).astype(np.int32)
-            v_coord = (p_cloud[:, 1] * 5 + args.height // 2).astype(np.int32)
+            # Top view: sensor x (forward) to image columns, sensor y (right) to image rows
+            u_coord = (p_cloud[:, 0] * PIXELS_PER_METER + args.width // 2).astype(np.int32)
+            v_coord = (p_cloud[:, 1] * PIXELS_PER_METER + args.height // 2).astype(np.int32)
 
             valid_mask = (u_coord >= 0) & (u_coord < args.width) & (v_coord >= 0) & (v_coord < args.height)
             u_coord = u_coord[valid_mask]
             v_coord = v_coord[valid_mask]
             intensity = intensity[valid_mask]
 
+            # OpenCV images are BGR, so the viridis channels go in reverse order
             color_map = np.array([
-                np.interp(intensity, VID_RANGE, VIRIDIS[:, 0]) * 255.0,
+                np.interp(intensity, VID_RANGE, VIRIDIS[:, 2]) * 255.0,
                 np.interp(intensity, VID_RANGE, VIRIDIS[:, 1]) * 255.0,
-                np.interp(intensity, VID_RANGE, VIRIDIS[:, 2]) * 255.0]).astype(np.int32).T
+                np.interp(intensity, VID_RANGE, VIRIDIS[:, 0]) * 255.0]).astype(np.int32).T
 
             for i in range(len(u_coord)):
                 cv2.circle(lidar_visualization, (u_coord[i], v_coord[i]), args.dot_extent, color_map[i].tolist(), -1)
@@ -125,19 +142,20 @@ def tutorial(args):
             print(f"Frame {frame+1}/{args.frames} processed.")
 
     finally:
-        world.apply_settings(original_settings)
-        if lidar:
+        if lidar is not None:
             lidar.stop()
             lidar.destroy()
-        if vehicle:
+        if vehicle is not None:
             vehicle.destroy()
-        if video_writer:
+        traffic_manager.set_synchronous_mode(False)
+        world.apply_settings(original_settings)
+        if video_writer is not None:
             video_writer.release()
-            print(f"LiDAR video saved as {save_path}")
+            print(f"LiDAR video saved as {args.out}")
 
 def main():
     argparser = argparse.ArgumentParser(
-        description='CARLA LiDAR recording example')
+        description='Record a top view of a CARLA LiDAR point cloud to a video')
     argparser.add_argument(
         '--host',
         metavar='H',
@@ -148,12 +166,18 @@ def main():
         metavar='P',
         default=2000,
         type=int,
-        help='TCP port to listen to (default: 2000)')
+        help='CARLA server port (default: 2000)')
+    argparser.add_argument(
+        '--tm-port',
+        metavar='P',
+        default=8000,
+        type=int,
+        help='Traffic Manager port (default: 8000)')
     argparser.add_argument(
         '--res',
         metavar='WIDTHxHEIGHT',
         default='800x600',
-        help='window resolution (default: 800x600)')
+        help='video resolution (default: 800x600)')
     argparser.add_argument(
         '-f', '--frames',
         metavar='N',
@@ -161,11 +185,16 @@ def main():
         type=int,
         help='number of frames to record (default: 500)')
     argparser.add_argument(
+        '-o', '--out',
+        metavar='FILE',
+        default=os.path.join('_out', 'lidar_output.mp4'),
+        help='output video file (default: _out/lidar_output.mp4)')
+    argparser.add_argument(
         '-d', '--dot-extent',
         metavar='SIZE',
         default=1,
         type=int,
-        help='visualization dot extent in pixels (Recomended [1-4]) (default: 1)')
+        help='radius of each drawn point in pixels, 1 to 4 works well (default: 1)')
     argparser.add_argument(
         '--no-noise',
         action='store_true',
@@ -185,8 +214,8 @@ def main():
     argparser.add_argument(
         '-c', '--channels',
         metavar='C',
-        default=64.0,
-        type=float,
+        default=64,
+        type=int,
         help='lidar\'s channel count (default: 64)')
     argparser.add_argument(
         '-r', '--range',
@@ -197,14 +226,14 @@ def main():
     argparser.add_argument(
         '--points-per-second',
         metavar='N',
-        default='100000',
+        default=100000,
         type=int,
         help='lidar points per second (default: 100000)')
     args = argparser.parse_args()
     args.width, args.height = [int(x) for x in args.res.split('x')]
 
     try:
-        tutorial(args)
+        record(args)
 
     except KeyboardInterrupt:
         print('\nCancelled by user. Bye!')

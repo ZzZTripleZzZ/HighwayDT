@@ -1,121 +1,152 @@
-import carla
-import random
-import time
-import numpy as np
-import cv2
+"""Record a truck on autopilot under changing weather and road friction.
+
+The script loads ``--map`` (default Town07), spawns a CarlaCola truck with a chase
+camera, and records the camera to ``--out``. It runs the world in synchronous mode
+with a fixed step of 1/30 s, so the 30 fps video plays in simulation time. Every
+``--interval`` simulated seconds it picks a random weather preset and replaces the
+friction box with one that has the friction value of that preset.
+
+Friction area: the box is centered on the truck each time the preset changes, with a
+default half size of 100 m. Choose ``--friction-half-size`` larger than the distance
+the truck drives in one interval, otherwise the truck leaves the box and CARLA gives
+its wheels their previous friction back.
+
+On exit the script destroys the friction box, the camera and the truck, and restores
+the world settings and the Traffic Manager mode.
+"""
+
+import argparse
 import os
+import random
 
-def change_weather_and_friction(world):
-    weather_presets = [
-        carla.WeatherParameters.ClearNoon,
-        carla.WeatherParameters.HardRainNoon,
-        carla.WeatherParameters.ClearSunset,
-        carla.WeatherParameters.HardRainSunset,
-        carla.WeatherParameters.WetNoon,
-        carla.WeatherParameters.WetSunset,
-        carla.WeatherParameters.MidRainSunset,
-    ]
+import carla
+import cv2
+import numpy as np
 
-    friction_values = {
-        carla.WeatherParameters.ClearNoon: 1.0,
-        carla.WeatherParameters.HardRainNoon: 0.5,
-        carla.WeatherParameters.ClearSunset: 1.0,
-        carla.WeatherParameters.HardRainSunset: 0.5,
-        carla.WeatherParameters.WetNoon: 0.7,
-        carla.WeatherParameters.WetSunset: 0.7,
-        carla.WeatherParameters.MidRainSunset: 0.5,
-    }
+from friction_trigger import destroy_actors, replace_friction_trigger
 
-    while True:
-        weather = random.choice(weather_presets)
-        world.set_weather(weather)
+FPS = 30
+IMAGE_WIDTH, IMAGE_HEIGHT = 800, 600
 
-        friction = friction_values[weather]
-        set_road_friction(world, friction)
+# Friction value of each weather preset, keyed by the preset name in carla.WeatherParameters
+FRICTION_BY_PRESET = {
+    'ClearNoon': 1.0,
+    'HardRainNoon': 0.5,
+    'ClearSunset': 1.0,
+    'HardRainSunset': 0.5,
+    'WetNoon': 0.7,
+    'WetSunset': 0.7,
+    'MidRainSunset': 0.5,
+}
 
-        time.sleep(3)
+DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Video', 'output.mp4')
 
-def set_road_friction(world, friction_value):
-    for actor in world.get_actors():
-        if 'static.trigger' in actor.type_id:
-            friction_bp = world.get_blueprint_library().find('static.trigger')
-            friction_bp.set_attribute('friction', str(friction_value))
-            transform = actor.get_transform()
-            world.spawn_actor(friction_bp, transform)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--host', default='127.0.0.1', help='CARLA server host (default: 127.0.0.1)')
+    parser.add_argument('-p', '--port', type=int, default=2000, help='CARLA server port (default: 2000)')
+    parser.add_argument('--tm-port', type=int, default=8000, help='Traffic Manager port (default: 8000)')
+    parser.add_argument('--map', default='Town07', help='CARLA map to load (default: Town07)')
+    parser.add_argument('--duration', type=float, default=60.0,
+                        help='simulated seconds to record (default: 60)')
+    parser.add_argument('--interval', type=float, default=3.0,
+                        help='simulated seconds between two weather changes (default: 3.0)')
+    parser.add_argument('--friction-half-size', type=float, default=100.0,
+                        help='half size of the friction box around the truck in meters (default: 100)')
+    parser.add_argument('--out', default=DEFAULT_OUT,
+                        help='output video file (default: Video/output.mp4 at the repository root)')
+    parser.add_argument('--seed', type=int, default=None, help='random seed for spawn point and presets')
+    return parser.parse_args()
+
 
 def spawn_hgv(world, blueprint_library):
     spawn_points = world.get_map().get_spawn_points()
 
-    # 手动选择一个接近地图下方的spawn point
+    # Use the first spawn point with x < -100 m and y < -100 m. If the map has none,
+    # use a random spawn point.
     chosen_spawn_point = None
     for sp in spawn_points:
-        if sp.location.y < -100 and sp.location.x < -100:  # 这里以 y 轴小于 -50 为例，表示地图靠下的区域
+        if sp.location.y < -100 and sp.location.x < -100:
             chosen_spawn_point = sp
             break
-
-    # 如果没有找到合适的点，默认使用第一个生成点
-    if not chosen_spawn_point:
+    if chosen_spawn_point is None:
         chosen_spawn_point = random.choice(spawn_points)
 
     hgv_bp = blueprint_library.filter('vehicle.carlamotors.carlacola')[0]
-    vehicle = world.spawn_actor(hgv_bp, chosen_spawn_point)
-    return vehicle
+    return world.spawn_actor(hgv_bp, chosen_spawn_point)
 
 
 def attach_camera_to_vehicle(world, vehicle):
     camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+    camera_bp.set_attribute('image_size_x', str(IMAGE_WIDTH))
+    camera_bp.set_attribute('image_size_y', str(IMAGE_HEIGHT))
 
-    # 设定第三人称视角的位置：在车辆后方6米，抬高2.5米
+    # Chase view: 15 m behind and 15 m above the truck, pitched 30 degrees down
     camera_transform = carla.Transform(carla.Location(x=-15, z=15), carla.Rotation(pitch=-30))
+    return world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
 
-    camera_bp.set_attribute('image_size_x', '800')
-    camera_bp.set_attribute('image_size_y', '600')
-    camera = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
-    return camera
-
-def drive_hgv(vehicle):
-    vehicle.set_autopilot(True)
 
 def process_camera_image(image, video_writer):
-    # 将CARLA图像转换为OpenCV图像
-    array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-    array = np.reshape(array, (image.height, image.width, 4))  # 原始数据为BGRA格式
-    array = array[:, :, :3]  # 保留BGR三个通道，去掉Alpha通道
+    # CARLA delivers BGRA bytes. Drop the alpha channel and write the BGR frame.
+    array = np.frombuffer(image.raw_data, dtype=np.dtype('uint8'))
+    array = np.reshape(array, (image.height, image.width, 4))
+    video_writer.write(np.ascontiguousarray(array[:, :, :3]))
 
-    # 直接写入视频文件（BGR格式）
-    video_writer.write(array)
 
 def main():
-    client = carla.Client('localhost', 2000)
-    client.set_timeout(10.0)
-    world = client.load_world('Town07')
+    args = parse_args()
+    random.seed(args.seed)
+
+    client = carla.Client(args.host, args.port)
+    client.set_timeout(30.0)
+    world = client.load_world(args.map)
     blueprint_library = world.get_blueprint_library()
 
-    hgv = spawn_hgv(world, blueprint_library)
-    camera = attach_camera_to_vehicle(world, hgv)
+    traffic_manager = client.get_trafficmanager(args.tm_port)
+    original_settings = world.get_settings()
+    settings = world.get_settings()
+    settings.synchronous_mode = True
+    settings.fixed_delta_seconds = 1.0 / FPS
+    world.apply_settings(settings)
+    traffic_manager.set_synchronous_mode(True)
 
-    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Video')
-    os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, 'output.mp4')
-    video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (800, 600))
-
-    camera.listen(lambda image: process_camera_image(image, video_writer))
-    drive_hgv(hgv)
-
+    hgv = camera = trigger = video_writer = None
     try:
-        change_weather_and_friction(world)
-        time.sleep(60)
+        out_dir = os.path.dirname(os.path.abspath(args.out))
+        os.makedirs(out_dir, exist_ok=True)
+        video_writer = cv2.VideoWriter(args.out, cv2.VideoWriter_fourcc(*'mp4v'), FPS,
+                                       (IMAGE_WIDTH, IMAGE_HEIGHT))
+
+        hgv = spawn_hgv(world, blueprint_library)
+        camera = attach_camera_to_vehicle(world, hgv)
+        camera.listen(lambda image: process_camera_image(image, video_writer))
+        hgv.set_autopilot(True, args.tm_port)
+        world.tick()   # the truck has a valid location only after the first tick
+
+        total_steps = int(round(args.duration * FPS))
+        steps_per_change = max(1, int(round(args.interval * FPS)))
+        for step in range(total_steps):
+            if step % steps_per_change == 0:
+                name = random.choice(list(FRICTION_BY_PRESET))
+                friction = FRICTION_BY_PRESET[name]
+                world.set_weather(getattr(carla.WeatherParameters, name))
+                trigger = replace_friction_trigger(world, trigger, friction, hgv.get_location(),
+                                                   args.friction_half_size)
+                print(f't = {step / FPS:6.1f} s: weather {name}, friction {friction}')
+            world.tick()
     except KeyboardInterrupt:
-        print('KeyboardInterrupt detected. Exiting...')
+        print('Interrupted by user.')
     finally:
-        # 停止传感器并释放资源
-        camera.stop()
-        video_writer.release()
-        print(f"Video saved as {save_path}")
+        if camera is not None:
+            camera.stop()
+        destroy_actors([trigger, camera, hgv])
+        traffic_manager.set_synchronous_mode(False)
+        world.apply_settings(original_settings)
+        if video_writer is not None:
+            video_writer.release()
+            print(f'Video saved as {args.out}')
+
 
 if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print('Exiting...')
-        cv2.destroyAllWindows()
+    main()

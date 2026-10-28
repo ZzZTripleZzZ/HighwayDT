@@ -84,37 +84,44 @@ Installing SUMO
 Setting Up Co-Simulation
 ------------------------
 
-1. **Clone Co-Simulation Repository**:
+CARLA ships the SUMO bridge in its own package, in the folder ``Co-Simulation/Sumo``. No other repository is needed. The steps below follow the `CARLA-SUMO co-simulation guide <https://carla.readthedocs.io/en/latest/adv_sumo/>`_.
 
-   Clone the repository that contains the co-simulation setup:
+1. **Configure Environment**:
 
-   .. code-block:: bash
-
-      git clone https://github.com/example/sumo-carla-co-simulation.git
-      cd sumo-carla-co-simulation
-
-2. **Install Python Dependencies**:
-
-   Install the required Python packages:
-
-   .. code-block:: bash
-
-      pip3 install -r requirements.txt
-
-3. **Configure Environment**:
-
-   Ensure that the paths to CARLA and SUMO are correctly set in the environment variables. You can add the following to your `~/.bashrc` file:
+   Set the paths to CARLA and SUMO. You can add the following to your ``~/.bashrc`` file:
 
    .. code-block:: bash
 
       export CARLA_ROOT=~/carla
       export SUMO_HOME=/usr/share/sumo
-      export PYTHONPATH=$PYTHONPATH:~/carla/PythonAPI/carla
 
-4. **Run Co-Simulation**:
-
-   Navigate to the co-simulation directory and run the script to start the co-simulation:
+   The bridge also needs the CARLA Python client. Install the version that matches the server, for example:
 
    .. code-block:: bash
 
-      python3 run_co_simulation.py
+      pip3 install carla==0.9.15
+
+2. **Start CARLA and Load Town04**:
+
+   Start the CARLA server in one terminal, then load the Town04 map from a second terminal:
+
+   .. code-block:: bash
+
+      cd $CARLA_ROOT
+      ./CarlaUE4.sh
+
+   .. code-block:: bash
+
+      cd $CARLA_ROOT/PythonAPI/util
+      python3 config.py --map Town04
+
+3. **Run Co-Simulation**:
+
+   Run the synchronization script with the Town04 example that comes with CARLA:
+
+   .. code-block:: bash
+
+      cd $CARLA_ROOT/Co-Simulation/Sumo
+      python3 run_synchronization.py examples/Town04.sumocfg --sumo-gui
+
+   Press ``Ctrl+C`` in this terminal to stop the co-simulation. The folder ``examples`` also holds configurations for Town01 and Town05.
