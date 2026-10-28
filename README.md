@@ -15,15 +15,14 @@
 
 <p>
   <a href="https://arxiv.org/abs/2607.08137"><b>Paper (arXiv)</b></a> &nbsp;·&nbsp;
-  <a href="https://nsf-oac.readthedocs.io/en/latest/"><b>Documentation</b></a> &nbsp;·&nbsp;
-  <a href="KNOWN-ISSUES.md"><b>Known issues</b></a>
+  <a href="https://nsf-oac.readthedocs.io/en/latest/"><b>Documentation</b></a>
 </p>
 
 </div>
 
 HighwayDT is a data-driven digital twin of a highway segment on Interstate 695 in Baltimore, Maryland, where road tests of new vehicle control policies would be unsafe. The twin is built from vehicle trajectories that a drone recorded on this segment. It reproduces car-following behavior with the recorded trajectories and a calibrated Intelligent Driver Model (IDM), a widely used model of how a driver adjusts speed to the vehicle ahead. HighwayDT runs a SUMO–CARLA co-simulation, which couples the SUMO traffic simulator with the CARLA driving simulator under additional physical constraints such as weather and road friction. It generates many scenarios in parallel and supports closed-loop simulation and predictive analytics for testing control policies. A fidelity test of following distances against real-world measurements shows only a small deviation.
 
-**Status.** Research prototype. This repository contains part of HighwayDT: a sample of the drone trajectories, the IDM calibration notebook and its guideline, the CARLA scripts for weather, road friction and LiDAR recording, and the Sphinx documentation for setting up CARLA, SUMO and their co-simulation. The SUMO network of the Interstate 695 segment and the scenario files used in the paper are not included. **The federated reinforcement learning training, attack and defense code of the paper is not part of this repository.** The CARLA scripts have not been run against a CARLA server since their last revision. [KNOWN-ISSUES.md](KNOWN-ISSUES.md) lists what still needs a check in CARLA.
+**Status.** Research prototype. This repository contains part of HighwayDT: a sample of the drone trajectories, the IDM calibration notebook and its guideline, the CARLA scripts for weather, road friction and LiDAR recording, and the Sphinx documentation for setting up CARLA, SUMO and their co-simulation. The SUMO network of the Interstate 695 segment and the scenario files used in the paper are not included. **The federated reinforcement learning training, attack and defense code of the paper is not part of this repository.**
 
 ## What it looks like
 
@@ -130,7 +129,6 @@ HighwayDT/
 │   ├── Makefile
 │   └── make.bat
 ├── .readthedocs.yaml
-├── KNOWN-ISSUES.md
 └── LICENSE
 ```
 
@@ -153,7 +151,9 @@ MIT, see [LICENSE](LICENSE).
 
 ## Contact
 
-Zifan Zhang, zzhang66@ncsu.edu
+**Zifan Zhang**, Ph.D. student, Department of Computer Science, North Carolina State University, Raleigh, NC, USA. Email: zzhang66@ncsu.edu
+
+**Yuchen Liu**, Assistant Professor, Department of Computer Science, North Carolina State University, Raleigh, NC, USA. Email: yliu322@ncsu.edu
 
 ## Acknowledgments
 
