@@ -51,7 +51,7 @@ HighwayDT is a data-driven digital twin of a highway segment on Interstate 695 i
 The calibration notebook needs only Python packages. `sko` is installed as `scikit-opt`.
 
 ```bash
-git clone https://github.com/ZzZTripleZzZ/highwayDT.git && cd highwayDT
+git clone https://github.com/ZzZTripleZzZ/HighwayDT.git && cd highwayDT
 python3 -m venv .venv && source .venv/bin/activate
 pip install pandas numpy matplotlib scikit-opt jupyter
 ```
