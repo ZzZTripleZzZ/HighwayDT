@@ -142,13 +142,18 @@ def record(args):
             print(f"Frame {frame+1}/{args.frames} processed.")
 
     finally:
+        # Restore the world settings before destroying the car. Destroying a car that the
+        # Traffic Manager still drives in synchronous mode aborts the client with
+        # "trying to operate on a destroyed actor".
         if lidar is not None:
             lidar.stop()
-            lidar.destroy()
         if vehicle is not None:
-            vehicle.destroy()
+            vehicle.set_autopilot(False, args.tm_port)
         traffic_manager.set_synchronous_mode(False)
         world.apply_settings(original_settings)
+        for actor in (lidar, vehicle):
+            if actor is not None and actor.is_alive:
+                actor.destroy()
         if video_writer is not None:
             video_writer.release()
             print(f"LiDAR video saved as {args.out}")

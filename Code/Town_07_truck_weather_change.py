@@ -9,7 +9,8 @@ friction box with one that has the friction value of that preset.
 Friction area: the box is centered on the truck each time the preset changes, with a
 default half size of 100 m. Choose ``--friction-half-size`` larger than the distance
 the truck drives in one interval, otherwise the truck leaves the box and CARLA gives
-its wheels their previous friction back.
+its wheels the friction they had when the box was spawned, which is the value of the
+previous preset.
 
 On exit the script destroys the friction box, the camera and the truck, and restores
 the world settings and the Traffic Manager mode.
@@ -39,7 +40,7 @@ FRICTION_BY_PRESET = {
     'MidRainSunset': 0.5,
 }
 
-DEFAULT_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Video', 'output.mp4')
+DEFAULT_OUT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Video', 'output.mp4'))
 
 
 def parse_args():
@@ -138,11 +139,16 @@ def main():
     except KeyboardInterrupt:
         print('Interrupted by user.')
     finally:
+        # Restore the world settings before destroying the truck. Destroying a truck that
+        # the Traffic Manager still drives in synchronous mode aborts the client with
+        # "trying to operate on a destroyed actor".
         if camera is not None:
             camera.stop()
-        destroy_actors([trigger, camera, hgv])
+        if hgv is not None:
+            hgv.set_autopilot(False, args.tm_port)
         traffic_manager.set_synchronous_mode(False)
         world.apply_settings(original_settings)
+        destroy_actors([trigger, camera, hgv])
         if video_writer is not None:
             video_writer.release()
             print(f'Video saved as {args.out}')

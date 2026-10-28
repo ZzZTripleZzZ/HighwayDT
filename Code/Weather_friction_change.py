@@ -9,7 +9,10 @@ Friction area: there is no ego vehicle in this script, so one box centered on th
 origin covers the whole map. Its default half size of 10 km is the size that CARLA's
 scenario_runner uses for the same purpose.
 
-On exit the script destroys the friction box and restores the weather it found.
+Destroying a friction box does not give the vehicles inside their earlier friction
+back. On exit the script therefore replaces the last box with one at CARLA's default
+tire friction of 3.5, waits for the server to apply it, and then destroys it. It also
+restores the weather it found.
 """
 
 import argparse
@@ -18,7 +21,7 @@ import time
 
 import carla
 
-from friction_trigger import destroy_actors, replace_friction_trigger
+from friction_trigger import DEFAULT_TIRE_FRICTION, destroy_actors, replace_friction_trigger
 
 # Friction value of each weather preset, keyed by the preset name in carla.WeatherParameters
 FRICTION_BY_PRESET = {
@@ -60,22 +63,31 @@ def main():
     world = client.get_world()
     original_weather = world.get_weather()
 
+    center = carla.Location(0.0, 0.0, 0.0)
     trigger = None
     try:
         for cycle in range(args.cycles):
             name = random.choice(list(FRICTION_BY_PRESET))
             friction = FRICTION_BY_PRESET[name]
             world.set_weather(getattr(carla.WeatherParameters, name))
-            trigger = replace_friction_trigger(world, trigger, friction, carla.Location(0.0, 0.0, 0.0),
-                                               args.friction_half_size)
+            trigger = replace_friction_trigger(world, trigger, friction, center, args.friction_half_size)
             print(f'[{cycle + 1}/{args.cycles}] weather {name}, friction {friction}')
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print('Interrupted by user.')
     finally:
+        if trigger is not None:
+            # The default box must exist for at least one simulation step before it is destroyed
+            trigger = replace_friction_trigger(world, trigger, DEFAULT_TIRE_FRICTION, center,
+                                               args.friction_half_size)
+            try:
+                for _ in range(2):
+                    world.wait_for_tick(5.0)
+            except RuntimeError:
+                print('No simulation step within 5 s, so the vehicles may keep the last friction value.')
         destroy_actors([trigger])
         world.set_weather(original_weather)
-        print('Friction box destroyed and original weather restored.')
+        print(f'Friction reset to {DEFAULT_TIRE_FRICTION}, friction box destroyed and original weather restored.')
 
 
 if __name__ == '__main__':
