@@ -91,7 +91,9 @@ python run_synchronization.py examples/Town04.sumocfg --sumo-gui
 
 **Car-following model.** HighwayDT uses the IDM, in which follower $n$ with speed $v_n$, gap $s_n$ and approach rate $\Delta v_n$ to its leader accelerates as
 
-$$\frac{dv_n}{dt} = a\left[1-\left(\frac{v_n}{v_0}\right)^{\delta}-\left(\frac{s^{*}(v_n,\Delta v_n)}{s_n}\right)^{2}\right], \qquad s^{*} = s_0 + v_n T + \frac{v_n\,\Delta v_n}{2\sqrt{ab}},$$
+```math
+\frac{dv_n}{dt} = a\left[1-\left(\frac{v_n}{v_0}\right)^{\delta}-\left(\frac{s^{\ast}(v_n,\Delta v_n)}{s_n}\right)^{2}\right], \qquad s^{\ast} = s_0 + v_n T + \frac{v_n \Delta v_n}{2\sqrt{ab}}
+```
 
 where $a$ is the maximum acceleration, $b$ the comfortable deceleration, $v_0$ the desired speed, $s_0$ the minimum gap, $T$ the time gap and $\delta = 4$.
 
