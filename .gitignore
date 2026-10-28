@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Sphinx build output
+docs/build/
+
+# Script outputs
+_out/
+Video/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
