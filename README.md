@@ -57,7 +57,7 @@ pip install pandas numpy matplotlib scikit-opt jupyter
 
 The CARLA scripts and the co-simulation need a CARLA 0.9.x server and SUMO.
 
-- **CARLA.** Download a 0.9.x release from the [CARLA releases page](https://github.com/carla-simulator/carla/releases) and follow the [CARLA documentation](https://carla.readthedocs.io/). Install the Python client that matches the server version, for example `pip install carla==0.9.15`, plus `numpy opencv-python matplotlib` for the scripts in `Code/`.
+- **CARLA.** Download a 0.9.x release from the [CARLA releases page](https://github.com/carla-simulator/carla/releases) and follow the [CARLA documentation](https://carla.readthedocs.io/). Install the Python client that matches the server version, for example `pip install carla==0.9.15`, plus `numpy opencv-python matplotlib` for the scripts in `Code/`. The scripts were run with CARLA 0.9.15 and Python 3.10. `Town_07_truck_weather_change.py` loads Town07, which is in CARLA's `AdditionalMaps` package.
 - **SUMO.** Follow the [SUMO installation guide](https://sumo.dlr.de/docs/Installing/index.html) and set `SUMO_HOME`.
 - **Co-simulation.** CARLA ships the SUMO bridge in `Co-Simulation/Sumo/`. The [CARLA–SUMO co-simulation guide](https://carla.readthedocs.io/en/latest/adv_sumo/) explains the setup. The [project documentation](https://nsf-oac.readthedocs.io/en/latest/) gives an Ubuntu walkthrough. Its sources are in `docs/source/`.
 
@@ -78,7 +78,7 @@ python Code/Weather_friction_change.py --cycles 20           # 20 weather and fr
 python Code/Town_07_truck_weather_change.py --duration 60    # Town07 truck with a chase camera, written to Video/output.mp4
 ```
 
-Each script takes `--help`. The two weather scripts set the road friction with CARLA's friction trigger volume (`static.trigger.friction`). `Weather_friction_change.py` places one volume over the whole map, and `Town_07_truck_weather_change.py` centers one on the truck at every weather change. `--map` selects another map for the truck script. To run CARLA's SUMO bridge on its Town04 example, as in the GIF above:
+Each script takes `--help`. The two weather scripts set the road friction with CARLA's friction trigger volume (`static.trigger.friction`). A vehicle inside the volume gets its value as the `tire_friction` of every wheel. In CARLA 0.9.15 every vehicle starts with a `tire_friction` of 3.5, so the preset values of 0.5 to 1.0 are all below the default. Destroying a volume leaves the vehicles inside at its value, and only leaving a volume gives them their earlier value back. `Weather_friction_change.py` places one volume over the whole map and sets the friction back to 3.5 when it exits. `Town_07_truck_weather_change.py` centers one volume on the truck at every weather change. `--map` selects another map for the truck script. To run CARLA's SUMO bridge on its Town04 example, as in the GIF above:
 
 ```bash
 cd $CARLA_ROOT/Co-Simulation/Sumo
