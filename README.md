@@ -129,12 +129,13 @@ HighwayDT/
 │   ├── Makefile
 │   └── make.bat
 ├── .readthedocs.yaml
+├── CITATION.cff
 └── LICENSE
 ```
 
 ## Citation
 
-HighwayDT is described in the following paper. Please cite it if you use this repository.
+HighwayDT is described in the following paper. Please cite it if you use this repository. The same reference is in [CITATION.cff](CITATION.cff), so GitHub's "Cite this repository" button exports it as BibTeX or APA.
 
 ```bibtex
 @article{zhang2026securing,

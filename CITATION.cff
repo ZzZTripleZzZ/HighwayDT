@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use HighwayDT, please cite the paper below."
+title: "HighwayDT: A Highway Digital Twin Built from Real-World Vehicle Trajectories"
+type: software
+authors:
+  - family-names: Zhang
+    given-names: Zifan
+    affiliation: North Carolina State University
+    email: zzhang66@ncsu.edu
+  - family-names: Liu
+    given-names: Yuchen
+    affiliation: North Carolina State University
+    email: yliu322@ncsu.edu
+repository-code: "https://github.com/ZzZTripleZzZ/HighwayDT"
+license: MIT
+year: 2026
+preferred-citation:
+  type: article
+  title: "Securing Autonomous Vehicle Systems via Twin-Aware Federated Reinforcement Learning"
+  authors:
+    - family-names: Zhang
+      given-names: Zifan
+    - family-names: Fang
+      given-names: Minghong
+    - family-names: Chen
+      given-names: Dianwei
+    - family-names: Liu
+      given-names: Zhuqing
+    - family-names: Khanduri
+      given-names: Prashant
+    - family-names: Yang
+      given-names: Xianfeng
+    - family-names: Das
+      given-names: Anupam
+    - family-names: Liu
+      given-names: Yuchen
+  journal: "arXiv preprint"
+  year: 2026
+  identifiers:
+    - type: other
+      value: "arXiv:2607.08137"
+  url: "https://arxiv.org/abs/2607.08137"
