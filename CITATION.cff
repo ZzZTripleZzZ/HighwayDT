@@ -13,7 +13,7 @@ authors:
     email: yliu322@ncsu.edu
 repository-code: "https://github.com/ZzZTripleZzZ/HighwayDT"
 license: MIT
-year: 2026
+date-released: "2026-10-28"
 preferred-citation:
   type: article
   title: "Securing Autonomous Vehicle Systems via Twin-Aware Federated Reinforcement Learning"
